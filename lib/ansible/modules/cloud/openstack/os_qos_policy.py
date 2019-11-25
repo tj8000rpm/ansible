@@ -1,5 +1,7 @@
 #!/usr/bin/python
 
+# Copyright (c) 2014 Hewlett-Packard Development Company, L.P.
+# Copyright (c) 2013, Benno Joy <benno@ansible.com>
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 from __future__ import absolute_import, division, print_function
@@ -60,69 +62,50 @@ EXAMPLES = '''
     defaulted: true
 '''
 
-# TODO: Update RETURNS
 RETURN = '''
-network:
+qos_policy:
     description: Dictionary describing the network.
     returned: On success when I(state) is 'present'.
     type: complex
     contains:
         id:
-            description: Network ID.
+            description: Network QoS policy ID.
             type: str
             sample: "4bb4f9a5-3bd2-4562-bf6a-d17a6341bb56"
         name:
-            description: Network name.
+            description: Network QoS policy name.
             type: str
-            sample: "ext_network"
+            sample: "myqospolicy"
         shared:
-            description: Indicates whether this network is shared across all tenants.
+            description: Indicates whether this network QoS policy is shared across all tenants.
             type: bool
             sample: false
-        status:
-            description: Network status.
+        description:
+            description: A human-readable description for the resource.
             type: str
             sample: "ACTIVE"
-        mtu:
-            description: The MTU of a network resource.
-            type: int
-            sample: 0
-        dns_domain:
-            description: The DNS domain of a network resource.
-            type: str
-            sample: "sample.openstack.org."
-        admin_state_up:
-            description: The administrative state of the network.
-            type: bool
-            sample: true
-        port_security_enabled:
-            description: The port security status
-            type: bool
-            sample: true
-        router:external:
-            description: Indicates whether this network is externally accessible.
-            type: bool
-            sample: true
         tenant_id:
-            description: The tenant ID.
+            description: The ID of the project.
             type: str
             sample: "06820f94b9f54b119636be2728d216fc"
-        subnets:
-            description: The associated subnets.
-            type: list
-            sample: []
-        "provider:physical_network":
-            description: The physical network where this network object is implemented.
+        project_id:
+            description: The ID of the project.
             type: str
-            sample: my_vlan_net
-        "provider:network_type":
-            description: The type of physical network that maps to this network resource.
-            type: str
-            sample: vlan
-        "provider:segmentation_id":
-            description: An isolated segment on the physical network.
-            type: str
-            sample: 101
+            sample: "06820f94b9f54b119636be2728d216fc"
+        rules:
+            description: A set of zero or more policy rules.
+            type: array
+            sample: false
+        is_default:
+            description: If true, the QoS policy is the default policy.
+            type: bool
+            sample: false
+        revision_number:
+            description: The revision number of the resource.
+            type: int
+            sample: '0'
+deleted_rules:
+    description: Deleted network QoS rule IDs related with network Qos policy.  returned: On success when I(state) is 'absent'.  type: array
 '''
 
 from ansible.module_utils.basic import AnsibleModule
@@ -165,17 +148,24 @@ def main():
         if state == 'present':
             if not qos:
                 if project_id is not None:
-                    qos = cloud.create_qos_policy(name, description, shared,
-                                                  defaulted, project_id)
+                    qos = cloud.create_qos_policy(name=name,
+                                                  description=description,
+                                                  shared=shared,
+                                                  default=defaulted,
+                                                  project_id=project_id)
                 else:
-                    qos = cloud.create_qos_policy(name, description, shared,
-                                                  defaulted)
+                    qos = cloud.create_qos_policy(name=name,
+                                                  description=description,
+                                                  shared=shared,
+                                                  default=defaulted)
                 changed = True
             elif (qos['is_default'] != defaulted or
                   qos['description'] != description or
                   qos['shared'] != shared):
-                qos = cloud.update_qos_policy(name, description, shared,
-                                              defaulted)
+                qos = cloud.update_qos_policy(name,
+                                              description=description,
+                                              shared=shared,
+                                              default=defaulted)
                 changed = True
             else:
                 changed = False
@@ -185,15 +175,6 @@ def main():
             if not qos:
                 module.exit_json(changed=False)
             else:
-                for qos_rule in qos['rules']:
-                    rule_id = qos_rule['id']
-                    rule_type = qos_rule['type']
-                    if rule_type == 'bandwidth_limit':
-                        cloud.delete_qos_bandwidth_limit_rule(name, rule_id)
-                    elif rule_type == 'dscp_marking':
-                        cloud.delete_qos_dscp_marking_rule(name, rule_id)
-                    elif rule_type == 'minimum_bandwidth':
-                        cloud.delete_qos_minimum_bandwidth_rule(name, rule_id)
                 cloud.delete_qos_policy(name)
                 module.exit_json(changed=True, deleted_rules=qos['rules'])
 

@@ -67,54 +67,65 @@ EXAMPLES = '''
     cloud: mycloud
     state: present
     qos_policy: myqospolicy
-    rule_type: bandwidth-limit
+    rule_type: bandwidth_limit
     direction: ingress
     max_kbps: 1000
     max_burst_kbps: 1000
 '''
 
 RETURN = '''
-qos_policy:
-    description: Dictionary describing the network.
-    returned: On success when I(state) is 'present'.
+qos_rule:
+    description: Dictionary describing the network QoS rule.
+    returned: On success when I(state) is 'present' or 'absent'.
     type: complex
     contains:
         id:
-            description: Network QoS policy ID.
+            description: Network QoS rule ID.
             type: str
             sample: "4bb4f9a5-3bd2-4562-bf6a-d17a6341bb56"
-        name:
-            description: Network QoS policy name.
-            type: str
-            sample: "myqospolicy"
-        shared:
-            description: Indicates whether this network QoS policy is shared across all tenants.
-            type: bool
-            sample: false
-        description:
-            description: A human-readable description for the resource.
-            type: str
-            sample: "ACTIVE"
-        tenant_id:
-            description: The ID of the project.
-            type: str
-            sample: "06820f94b9f54b119636be2728d216fc"
-        project_id:
-            description: The ID of the project.
-            type: str
-            sample: "06820f94b9f54b119636be2728d216fc"
-        rules:
-            description: A set of zero or more policy rules.
-            type: array
-            sample: false
-        is_default:
-            description: If true, the QoS policy is the default policy.
-            type: bool
-            sample: false
-        revision_number:
-            description: The revision number of the resource.
+        max_kbps:
+            description: >
+                The maximum KBPS (kilobits per second) value.
+                If you specify this value,
+                must be greater than 0 otherwise max_kbps will have no value.
+                (in case type is bandwidth_limit)
             type: int
-            sample: '0'
+            sample: 1000
+        max_burst_kbps:
+            description: >
+                The maximum burst size (in kilobits). Default is 0. (OPTIONAL)
+                (in case type is bandwidth_limit)
+            type: int
+            sample: 1000
+        dscp_mark:
+            description: >
+                The DSCP mark value. (in case type is dscp_marking)
+            type: int
+            sample: 26
+        min_kbps:
+            description: >
+                The minimum KBPS (kilobits per second) value
+                which should be available for port.
+                (in case type is minimum_bandwidth)
+            type: int
+            sample: 1000
+        direction:
+            description: >
+                The direction of the traffic to which the QoS rule is applied,
+                as seen from the point of view of the port.
+                Valid values are egress and ingress. Default value is egress.
+                (in case type is bandwidth_limit or minimum_bandwidth)
+            type: str
+            sample: ingress
+        qos_policy_id:
+            description: ID of the QoS policy to which rule is associated. 
+            type; str
+            sample: "4bb4f9a5-3bd2-4562-bf6a-d17a6341bb56"
+        type:
+            description: >
+                qos rule type (minimum_bandwidth, dscp_marking, bandwidth_limit)
+            type: str
+            sample: "bandwidth_limit"
 '''
 
 from ansible.module_utils.basic import AnsibleModule
@@ -161,11 +172,12 @@ def main():
             project_id = None
             filters = None
         qos_policy = cloud.get_qos_policy(policy_name_or_id, filters=filters)
-        qos_rule = None
 
         if not qos_policy:
             module.fail_json(msg='Networt QoS policy does not exist.')
 
+        policy_id = qos_policy['id']
+        qos_rule = None
         existing_rules = dict()
         existing_rules_key_to_id = dict()
 
@@ -200,47 +212,52 @@ def main():
                                                             min_kbps, **kwargs)
                 else:
                     module.fail_json(msg='invalid qos rule type.')
-                module.exit_json(changed=True, qos_rule=qos_rule,
-                                 id=qos_rule['id'])
+                qos_rule['type'] = rule_type
+                qos_rule['qos_policy_id'] = policy_id
+                module.exit_json(changed=True, qos_rule=qos_rule)
             else:
-                existed_id = existing_rules_key_to_id[(direction, rule_type)]
-                existing_rule = existing_rules[existed_id]
+                rule_id = existing_rules_key_to_id[(direction, rule_type)]
+                existing_rule = existing_rules[rule_id]
                 if rule_type == 'bandwidth_limit':
                     kwargs['max_kbps'] = max_kbps
                     for key, value in kwargs.items():
                         if existing_rule[key] != value:
                             qos_rule = cloud.update_qos_bandwidth_limit_rule(
                                                             policy_name_or_id,
-                                                            existed_id,
+                                                            rule_id,
                                                             **kwargs)
-                            module.exit_json(changed=True, qos_rule=qos_rule,
-                                             id=qos_rule['id'])
+                            qos_rule['type'] = rule_type
+                            qos_rule['qos_policy_id'] = policy_id
+                            module.exit_json(changed=True, qos_rule=qos_rule)
                 elif rule_type == 'dscp_marking':
                     kwargs['dscp_mark'] = dscp_mark
                     for key, value in kwargs.items():
                         if existing_rule[key] != value:
                             qos_rule = cloud.update_qos_dscp_marking_rule(
                                                             policy_name_or_id,
-                                                            existed_id,
+                                                            rule_id,
                                                             **kwargs)
-                            module.exit_json(changed=True, qos_rule=qos_rule,
-                                             id=qos_rule['id'])
+                            qos_rule['type'] = rule_type
+                            qos_rule['qos_policy_id'] = policy_id
+                            module.exit_json(changed=True, qos_rule=qos_rule)
                 elif rule_type == 'minimum_bandwidth':
                     kwargs['min_kbps'] = min_kbps
                     for key, value in kwargs.items():
                         if existing_rule[key] != value:
                             qos_rule = cloud.update_qos_minimum_bandwidth_rule(
                                                             policy_name_or_id,
-                                                            existed_id,
+                                                            rule_id,
                                                             **kwargs)
-                            module.exit_json(changed=True, qos_rule=qos_rule,
-                                             id=qos_rule['id'])
-                module.exit_json(changed=False, id=existed_id)
+                            qos_rule['type'] = rule_type
+                            qos_rule['qos_policy_id'] = policy_id
+                            module.exit_json(changed=True, qos_rule=qos_rule)
+                module.exit_json(changed=False)
         elif state == 'absent':
             if (direction, rule_type) not in existing_rules_key_to_id:
                 module.exit_json(changed=False)
             else:
                 rule_id = existing_rules_key_to_id[(direction, rule_type)]
+                existing_rule = existing_rules[rule_id]
                 if rule_type == 'bandwidth_limit':
                     cloud.delete_qos_bandwidth_limit_rule(policy_name_or_id,
                                                           rule_id)
@@ -252,7 +269,7 @@ def main():
                                                             rule_id)
                 else:
                     module.fail_json(msg='invalid qos rule type.')
-                module.exit_json(changed=True)
+                module.exit_json(changed=True, qos_rule=existing_rule)
 
     except sdk.exceptions.OpenStackCloudException as e:
         module.fail_json(msg=str(e))

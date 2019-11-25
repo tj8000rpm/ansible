@@ -64,7 +64,7 @@ EXAMPLES = '''
 
 RETURN = '''
 qos_policy:
-    description: Dictionary describing the network.
+    description: Dictionary describing the network QoS policy.
     returned: On success when I(state) is 'present'.
     type: complex
     contains:
@@ -105,7 +105,9 @@ qos_policy:
             type: int
             sample: '0'
 deleted_rules:
-    description: Deleted network QoS rule IDs related with network Qos policy.  returned: On success when I(state) is 'absent'.  type: array
+    description: Deleted network QoS rules related with network Qos policy.
+    returned: On success when I(state) is 'absent'.
+    type: array
 '''
 
 from ansible.module_utils.basic import AnsibleModule
@@ -169,7 +171,7 @@ def main():
                 changed = True
             else:
                 changed = False
-            module.exit_json(changed=changed, qos_policy=qos, id=qos['id'])
+            module.exit_json(changed=changed, qos_policy=qos)
 
         elif state == 'absent':
             if not qos:

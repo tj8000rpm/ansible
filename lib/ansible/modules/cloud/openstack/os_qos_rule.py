@@ -40,7 +40,8 @@ options:
         - Maximum burst in kilobits, 0 means automatic.
    dscp_mark:
      description:
-        - DSCP mark: value can be 0, even numbers from 8-56,
+        - >
+          DSCP mark: value can be 0, even numbers from 8-56,
           excluding 42, 44, 50, 52, and 54.
    min_kbps:
      description:

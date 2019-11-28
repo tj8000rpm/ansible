@@ -1662,6 +1662,8 @@ lib/ansible/modules/cloud/openstack/os_project_facts.py validate-modules:E337
 lib/ansible/modules/cloud/openstack/os_project_facts.py validate-modules:E338
 lib/ansible/modules/cloud/openstack/os_qos_policy.py validate-modules:E337
 lib/ansible/modules/cloud/openstack/os_qos_policy.py validate-modules:E338
+lib/ansible/modules/cloud/openstack/os_qos_rule.py validate-modules:E337
+lib/ansible/modules/cloud/openstack/os_qos_rule.py validate-modules:E338
 lib/ansible/modules/cloud/openstack/os_quota.py validate-modules:E322
 lib/ansible/modules/cloud/openstack/os_quota.py validate-modules:E323
 lib/ansible/modules/cloud/openstack/os_quota.py validate-modules:E326

@@ -133,6 +133,13 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.openstack import openstack_full_argument_spec, openstack_module_kwargs, openstack_cloud_from_module
 
 
+def has_changed(existing_kv, desired_kv):
+    for key, value in desired_kv.items():
+        if existing_kv[key] != value:
+            return True
+    return False
+
+
 def main():
     argument_spec = openstack_full_argument_spec(
         qos_policy=dict(required=True),
@@ -183,9 +190,7 @@ def main():
         existing_rules_key_to_id = dict()
 
         for rule in qos_policy['rules']:
-            dire = None
-            if 'direction' in rule:
-                dire = rule['direction']
+            dire = rule.get('direction', None)
             typ = rule['type']
             existing_rules_key_to_id[(dire, typ)] = rule['id']
             existing_rules[rule['id']] = rule
@@ -197,8 +202,10 @@ def main():
             if max_burst_kbps:
                 kwargs['max_burst_kbps'] = max_burst_kbps
 
-        if state == 'present':
-            if (direction, rule_type) not in existing_rules_key_to_id:
+        if (direction, rule_type) not in existing_rules_key_to_id:
+            if state == 'absent':
+                module.exit_json(changed=False)
+            elif state == 'present':
                 if rule_type == 'bandwidth_limit':
                     qos_rule = cloud.create_qos_bandwidth_limit_rule(
                                                             policy_name_or_id,
@@ -213,64 +220,53 @@ def main():
                                                             min_kbps, **kwargs)
                 else:
                     module.fail_json(msg='invalid qos rule type.')
-                qos_rule['type'] = rule_type
-                qos_rule['qos_policy_id'] = policy_id
-                module.exit_json(changed=True, qos_rule=qos_rule)
-            else:
-                rule_id = existing_rules_key_to_id[(direction, rule_type)]
-                existing_rule = existing_rules[rule_id]
-                if rule_type == 'bandwidth_limit':
-                    kwargs['max_kbps'] = max_kbps
-                    for key, value in kwargs.items():
-                        if existing_rule[key] != value:
-                            qos_rule = cloud.update_qos_bandwidth_limit_rule(
-                                                            policy_name_or_id,
-                                                            rule_id,
-                                                            **kwargs)
-                            qos_rule['type'] = rule_type
-                            qos_rule['qos_policy_id'] = policy_id
-                            module.exit_json(changed=True, qos_rule=qos_rule)
-                elif rule_type == 'dscp_marking':
-                    kwargs['dscp_mark'] = dscp_mark
-                    for key, value in kwargs.items():
-                        if existing_rule[key] != value:
-                            qos_rule = cloud.update_qos_dscp_marking_rule(
-                                                            policy_name_or_id,
-                                                            rule_id,
-                                                            **kwargs)
-                            qos_rule['type'] = rule_type
-                            qos_rule['qos_policy_id'] = policy_id
-                            module.exit_json(changed=True, qos_rule=qos_rule)
-                elif rule_type == 'minimum_bandwidth':
-                    kwargs['min_kbps'] = min_kbps
-                    for key, value in kwargs.items():
-                        if existing_rule[key] != value:
-                            qos_rule = cloud.update_qos_minimum_bandwidth_rule(
-                                                            policy_name_or_id,
-                                                            rule_id,
-                                                            **kwargs)
-                            qos_rule['type'] = rule_type
-                            qos_rule['qos_policy_id'] = policy_id
-                            module.exit_json(changed=True, qos_rule=qos_rule)
-                module.exit_json(changed=False)
-        elif state == 'absent':
-            if (direction, rule_type) not in existing_rules_key_to_id:
-                module.exit_json(changed=False)
-            else:
-                rule_id = existing_rules_key_to_id[(direction, rule_type)]
-                existing_rule = existing_rules[rule_id]
-                if rule_type == 'bandwidth_limit':
+        else:
+            rule_id = existing_rules_key_to_id[(direction, rule_type)]
+            existing_rule = existing_rules[rule_id]
+            if rule_type == 'bandwidth_limit':
+                if state == 'absent':
                     cloud.delete_qos_bandwidth_limit_rule(policy_name_or_id,
                                                           rule_id)
-                elif rule_type == 'dscp_marking':
+                    qos_rule = existing_rules
+                elif state == 'present':
+                    kwargs['max_kbps'] = max_kbps
+                    if not has_changed(existing_rule, kwargs):
+                        module.exit_json(changed=False)
+                    qos_rule = cloud.update_qos_bandwidth_limit_rule(
+                                                    policy_name_or_id,
+                                                    rule_id,
+                                                    **kwargs)
+            elif rule_type == 'dscp_marking':
+                if state == 'absent':
                     cloud.delete_qos_dscp_marking_rule(policy_name_or_id,
                                                        rule_id)
-                elif rule_type == 'minimum_bandwidth':
+                    qos_rule = existing_rules
+                elif state == 'present':
+                    kwargs['dscp_mark'] = dscp_mark
+                    if not has_changed(existing_rule, kwargs):
+                        module.exit_json(changed=False)
+                    qos_rule = cloud.update_qos_dscp_marking_rule(
+                                                    policy_name_or_id,
+                                                    rule_id,
+                                                    **kwargs)
+            elif rule_type == 'minimum_bandwidth':
+                if state == 'absent':
                     cloud.delete_qos_minimum_bandwidth_rule(policy_name_or_id,
                                                             rule_id)
-                else:
-                    module.fail_json(msg='invalid qos rule type.')
-                module.exit_json(changed=True, qos_rule=existing_rule)
+                    qos_rule = existing_rules
+                elif state == 'present':
+                    kwargs['min_kbps'] = min_kbps
+                    if not has_changed(existing_rule, kwargs):
+                        module.exit_json(changed=False)
+                    qos_rule = cloud.update_qos_minimum_bandwidth_rule(
+                                                    policy_name_or_id,
+                                                    rule_id,
+                                                    **kwargs)
+            else:
+                module.fail_json(msg='invalid qos rule type.')
+        qos_rule['type'] = rule_type
+        qos_rule['qos_policy_id'] = policy_id
+        module.exit_json(changed=True, qos_rule=qos_rule)
 
     except sdk.exceptions.OpenStackCloudException as e:
         module.fail_json(msg=str(e))
